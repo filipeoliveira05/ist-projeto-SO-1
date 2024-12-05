@@ -35,6 +35,18 @@ void list_job_files(const char *dir_path, char files[][MAX_PATH_LENGTH], size_t 
     closedir(dir);
 }
 
+// Extrai o nome base de um ficheiro (sem caminho e sem extensão)
+void get_basename_without_extension(const char *path, char *basename) {
+    const char *filename = strrchr(path, '/');
+    filename = filename ? filename + 1 : path;
+
+    char *dot = strrchr(filename, '.');
+    size_t len = dot ? (size_t)(dot - filename) : strlen(filename);
+
+    strncpy(basename, filename, len);
+    basename[len] = '\0';
+}
+
 // Processa comandos de um ficheiro .job e gera um ficheiro .out
 void process_job_file(const char *input_file) {
     int fd_input = open(input_file, O_RDONLY);
@@ -45,7 +57,16 @@ void process_job_file(const char *input_file) {
 
     // Gerar o nome do ficheiro de saída
     char output_file[MAX_PATH_LENGTH];
-    snprintf(output_file, MAX_PATH_LENGTH, "%s.out", input_file);
+    strncpy(output_file, input_file, MAX_PATH_LENGTH - 1);
+    output_file[MAX_PATH_LENGTH - 1] = '\0'; // Garantir terminação
+
+    char *dot = strrchr(output_file, '.');
+    if (dot) {
+        strncpy(dot, ".out", (size_t)(MAX_PATH_LENGTH - (dot - output_file) - 1));
+        output_file[MAX_PATH_LENGTH - 1] = '\0'; // Garantir terminação
+    } else {
+        strncat(output_file, ".out", MAX_PATH_LENGTH - strlen(output_file) - 1);
+    }
 
     int fd_output = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd_output == -1) {
@@ -54,7 +75,7 @@ void process_job_file(const char *input_file) {
         return;
     }
 
-    // Redirecionar a saída padrão (stdout) para o arquivo de saída
+    // Redirecionar stdout para o ficheiro .out
     if (dup2(fd_output, STDOUT_FILENO) == -1) {
         perror("Failed to redirect stdout to output file");
         close(fd_input);
@@ -75,43 +96,43 @@ void process_job_file(const char *input_file) {
             case CMD_WRITE:
                 num_pairs = parse_write(fd_input, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 if (num_pairs == 0) {
-                    dprintf(fd_output, "Invalid command. See HELP for usage\n");
+                    printf("Invalid command. See HELP for usage\n");
                     continue;
                 }
                 if (kvs_write(num_pairs, keys, values)) {
-                    dprintf(fd_output, "Failed to write pair\n");
+                    printf("Failed to write pair\n");
                 }
                 break;
 
             case CMD_READ:
                 num_pairs = parse_read_delete(fd_input, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 if (num_pairs == 0) {
-                    dprintf(fd_output, "Invalid command. See HELP for usage\n");
+                    printf("Invalid command. See HELP for usage\n");
                     continue;
                 }
                 if (kvs_read(num_pairs, keys)) {
-                    dprintf(fd_output, "Failed to read pair\n");
+                    printf("Failed to read pair\n");
                 }
                 break;
 
             case CMD_DELETE:
                 num_pairs = parse_read_delete(fd_input, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 if (num_pairs == 0) {
-                    dprintf(fd_output, "Invalid command. See HELP for usage\n");
+                    printf("Invalid command. See HELP for usage\n");
                     continue;
                 }
                 if (kvs_delete(num_pairs, keys)) {
-                    dprintf(fd_output, "Failed to delete pair\n");
+                    printf("Failed to delete pair\n");
                 }
                 break;
 
             case CMD_SHOW:
-                kvs_show(); // Aqui você pode redirecionar a saída de kvs_show() para o arquivo
+                kvs_show(); // Saída vai para fd_output devido ao redirecionamento
                 break;
 
             case CMD_WAIT:
                 if (parse_wait(fd_input, &delay, NULL) == -1) {
-                    dprintf(fd_output, "Invalid command. See HELP for usage\n");
+                    printf("Invalid command. See HELP for usage\n");
                     continue;
                 }
                 if (delay > 0) {
@@ -121,24 +142,24 @@ void process_job_file(const char *input_file) {
 
             case CMD_BACKUP:
                 if (kvs_backup()) {
-                    dprintf(fd_output, "Failed to perform backup.\n");
+                    printf("Failed to perform backup.\n");
                 }
                 break;
 
             case CMD_INVALID:
-                dprintf(fd_output, "Invalid command. See HELP for usage\n");
+                printf("Invalid command. See HELP for usage\n");
                 break;
 
             case CMD_HELP:
-                dprintf(fd_output,
-                        "Available commands:\n"
-                        "  WRITE [(key,value)(key2,value2),...]\n"
-                        "  READ [key,key2,...]\n"
-                        "  DELETE [key,key2,...]\n"
-                        "  SHOW\n"
-                        "  WAIT <delay_ms>\n"
-                        "  BACKUP\n"
-                        "  HELP\n");
+                printf(
+                    "Available commands:\n"
+                    "  WRITE [(key,value)(key2,value2),...]\n"
+                    "  READ [key,key2,...]\n"
+                    "  DELETE [key,key2,...]\n"
+                    "  SHOW\n"
+                    "  WAIT <delay_ms>\n"
+                    "  BACKUP\n"
+                    "  HELP\n");
                 break;
 
             case CMD_EMPTY:
@@ -151,6 +172,7 @@ void process_job_file(const char *input_file) {
         }
     }
 }
+
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
