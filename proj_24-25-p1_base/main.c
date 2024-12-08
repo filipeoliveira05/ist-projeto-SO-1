@@ -47,23 +47,15 @@ void process_job_file(const char *input_file) {
         return;
     }
 
-    // Gerar o nome do ficheiro de saída, remover a extensão ".job" e adicionar ".out"
+    // Gerar o nome do ficheiro de saída, removendo ".job" e adicionando ".out"
     char output_file[MAX_PATH_LENGTH];
-    snprintf(output_file, MAX_PATH_LENGTH, "%.*s.out", (int)(strlen(input_file) - 4), input_file);  // ".job" tem 4 caracteres
+    snprintf(output_file, MAX_PATH_LENGTH, "%.*s.out", (int)(strlen(input_file) - 4), input_file);
+    printf("Output file will be: %s\n", output_file);  // Mensagem de debug
 
     int fd_output = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd_output == -1) {
         perror("Failed to open output file");
         close(fd_input);
-        return;
-    }
-
-    // Fechar stdout e redirecionar a saída para o arquivo de saída
-    close(STDOUT_FILENO);
-    if (dup(fd_output) == -1) {  // Redireciona a saída para o novo arquivo
-        perror("Failed to redirect stdout to output file");
-        close(fd_input);
-        close(fd_output);
         return;
     }
 
@@ -80,43 +72,124 @@ void process_job_file(const char *input_file) {
             case CMD_WRITE:
                 num_pairs = parse_write(fd_input, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 if (num_pairs == 0) {
-                    dprintf(STDOUT_FILENO, "Invalid command. See HELP for usage\n");
+                    fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
-                if (kvs_write(num_pairs, keys, values)) {
-                    dprintf(STDOUT_FILENO, "Failed to write pair\n");
+                // Redirecionar stdout para o arquivo de saída
+                printf("Redirecting stdout to output file for WRITE command\n");  // Mensagem de debug
+                int saved_stdout_write = dup(STDOUT_FILENO);
+                if (saved_stdout_write == -1) {
+                    perror("Failed to duplicate stdout");
+                    break;
                 }
+                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+                    perror("Failed to redirect stdout");
+                    close(saved_stdout_write);
+                    break;
+                }
+
+                // Executar o comando WRITE
+                if (kvs_write(num_pairs, keys, values)) {
+                    fprintf(stderr, "Failed to write pair\n");
+                }
+
+                // Restaurar stdout original
+                if (dup2(saved_stdout_write, STDOUT_FILENO) == -1) {
+                    perror("Failed to restore stdout");
+                }
+                close(saved_stdout_write);
                 break;
 
             case CMD_READ:
                 num_pairs = parse_read_delete(fd_input, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 if (num_pairs == 0) {
-                    dprintf(STDOUT_FILENO, "Invalid command. See HELP for usage\n");
+                    fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
-                if (kvs_read(num_pairs, keys)) {
-                    dprintf(STDOUT_FILENO, "Failed to read pair\n");
+                // Redirecionar stdout para o arquivo de saída
+                printf("Redirecting stdout to output file for READ command\n");  // Mensagem de debug
+                int saved_stdout_read = dup(STDOUT_FILENO);
+                if (saved_stdout_read == -1) {
+                    perror("Failed to duplicate stdout");
+                    break;
                 }
+                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+                    perror("Failed to redirect stdout");
+                    close(saved_stdout_read);
+                    break;
+                }
+
+                // Executar o comando READ
+                if (kvs_read(num_pairs, keys)) {
+                    fprintf(stderr, "Failed to read pair\n");
+                }
+
+                // Restaurar stdout original
+                if (dup2(saved_stdout_read, STDOUT_FILENO) == -1) {
+                    perror("Failed to restore stdout");
+                }
+                close(saved_stdout_read);
                 break;
 
             case CMD_DELETE:
                 num_pairs = parse_read_delete(fd_input, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 if (num_pairs == 0) {
-                    dprintf(STDOUT_FILENO, "Invalid command. See HELP for usage\n");
+                    fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
-                if (kvs_delete(num_pairs, keys)) {
-                    dprintf(STDOUT_FILENO, "Failed to delete pair\n");
+                // Redirecionar stdout para o arquivo de saída
+                printf("Redirecting stdout to output file for DELETE command\n");  // Mensagem de debug
+                int saved_stdout_delete = dup(STDOUT_FILENO);
+                if (saved_stdout_delete == -1) {
+                    perror("Failed to duplicate stdout");
+                    break;
                 }
+                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+                    perror("Failed to redirect stdout");
+                    close(saved_stdout_delete);
+                    break;
+                }
+
+                // Executar o comando DELETE
+                if (kvs_delete(num_pairs, keys)) {
+                    fprintf(stderr, "Failed to delete pair\n");
+                }
+
+                // Restaurar stdout original
+                if (dup2(saved_stdout_delete, STDOUT_FILENO) == -1) {
+                    perror("Failed to restore stdout");
+                }
+                close(saved_stdout_delete);
                 break;
 
-            case CMD_SHOW:
-                kvs_show(); // Aqui você pode redirecionar a saída de kvs_show() para o arquivo
+            case CMD_SHOW: {
+                // Redirecionar stdout para o arquivo de saída
+                printf("Redirecting stdout to output file for SHOW command\n");  // Mensagem de debug
+                int saved_stdout_show = dup(STDOUT_FILENO);
+                if (saved_stdout_show == -1) {
+                    perror("Failed to duplicate stdout");
+                    break;
+                }
+                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+                    perror("Failed to redirect stdout");
+                    close(saved_stdout_show);
+                    break;
+                }
+
+                // Executar o comando SHOW
+                kvs_show(); // Saída gerada pela função kvs_show vai para fd_output
+
+                // Restaurar stdout original
+                if (dup2(saved_stdout_show, STDOUT_FILENO) == -1) {
+                    perror("Failed to restore stdout");
+                }
+                close(saved_stdout_show);
                 break;
+            }
 
             case CMD_WAIT:
                 if (parse_wait(fd_input, &delay, NULL) == -1) {
-                    dprintf(STDOUT_FILENO, "Invalid command. See HELP for usage\n");
+                    fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
                 if (delay > 0) {
@@ -126,26 +199,27 @@ void process_job_file(const char *input_file) {
 
             case CMD_BACKUP:
                 if (kvs_backup()) {
-                    dprintf(STDOUT_FILENO, "Failed to perform backup.\n");
+                    fprintf(stderr, "Failed to perform backup.\n");
                 }
                 break;
 
             case CMD_INVALID:
-                dprintf(STDOUT_FILENO, "Invalid command. See HELP for usage\n");
+                fprintf(stderr, "Invalid command. See HELP for usage\n");
                 break;
 
             case CMD_HELP:
-                dprintf(STDOUT_FILENO,
-                        "Available commands:\n"
-                        "  WRITE [(key,value)(key2,value2),...]\n"
-                        "  READ [key,key2,...]\n"
-                        "  DELETE [key,key2,...]\n"
-                        "  SHOW\n"
-                        "  WAIT <delay_ms>\n"
-                        "  BACKUP\n"
-                        "  HELP\n");
+                printf( 
+                    "Available commands:\n"
+                    "  WRITE [(key,value)(key2,value2),...]\n"
+                    "  READ [key,key2,...]\n"
+                    "  DELETE [key,key2,...]\n"
+                    "  SHOW\n"
+                    "  WAIT <delay_ms>\n"
+                    "  BACKUP\n" // Not implemented
+                    "  HELP\n"
+                );
                 break;
-
+            
             case CMD_EMPTY:
                 break;
 
@@ -178,6 +252,7 @@ int main(int argc, char *argv[]) {
 
     // Processar cada ficheiro .job
     for (size_t i = 0; i < num_files; i++) {
+        printf("Processing job file: %s\n", job_files[i]);  // Mensagem de debug
         process_job_file(job_files[i]);
     }
 
