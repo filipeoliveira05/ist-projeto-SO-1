@@ -47,9 +47,8 @@ void process_job_file(const char *input_file) {
         return;
     }
 
-    // Gerar o nome do ficheiro de saída
+    // Gerar o nome do ficheiro de saída, remover a extensão ".job" e adicionar ".out"
     char output_file[MAX_PATH_LENGTH];
-    // Remover a extensão ".job" e adicionar ".out"
     snprintf(output_file, MAX_PATH_LENGTH, "%.*s.out", (int)(strlen(input_file) - 4), input_file);  // ".job" tem 4 caracteres
 
     int fd_output = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
