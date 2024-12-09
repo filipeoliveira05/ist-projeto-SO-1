@@ -100,6 +100,7 @@ void process_job_file(const char *input_file) {
                     break;
                 }
 
+                sort_key_value_pairs(keys, values, num_pairs);
                 if (kvs_write(num_pairs, keys, values)) {
                     fprintf(stderr, "Failed to write pair\n");
                 }
@@ -120,6 +121,7 @@ void process_job_file(const char *input_file) {
                     break;
                 }
 
+                sort_key_value_pairs(keys, values, num_pairs);
                 if (kvs_read(num_pairs, keys)) {
                     fprintf(stderr, "Failed to read pair\n");
                 }
