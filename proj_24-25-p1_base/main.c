@@ -11,6 +11,8 @@
 #include "parser.h"
 #include "operations.h"
 
+#define MAX_PATH_LENGTH 4096
+
 // Função para redirecionar saída padrão
 int redirect_output(int new_fd, int *saved_fd) {
     fflush(stdout); // Garante que todos os dados pendentes sejam escritos antes de redirecionar
@@ -60,13 +62,8 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files) {
     size_t index = 0;
     while ((entry = readdir(dir)) != NULL) {
         if (strstr(entry->d_name, ".job")) {
-            size_t path_length = strlen(dir_path) + strlen(entry->d_name) + 2; // +1 para '/' e +1 para '\0'
-            (*files)[index] = (char *)malloc(path_length);
-            if ((*files)[index] == NULL) {
-                perror("Failed to allocate memory for file path");
-                exit(EXIT_FAILURE);
-            }
-            snprintf((*files)[index], path_length, "%s/%s", dir_path, entry->d_name);
+            (*files)[index] = (char *)malloc(MAX_PATH_LENGTH * sizeof(char));
+            snprintf((*files)[index], MAX_PATH_LENGTH, "%s/%s", dir_path, entry->d_name);
             index++;
         }
     }
@@ -77,7 +74,6 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files) {
     qsort(*files, *num_files, sizeof((*files)[0]), (int(*)(const void *, const void *))strcmp);
 }
 
-
 // Processa comandos de um ficheiro .job e gera um ficheiro .out
 void process_job_file(const char *input_file) {
     int fd_input = open(input_file, O_RDONLY);
@@ -87,24 +83,17 @@ void process_job_file(const char *input_file) {
     }
 
     // Gerar o nome do ficheiro de saída, removendo ".job" e adicionando ".out"
-    size_t output_length = strlen(input_file) + 1; // +1 para '\0'
-    char *output_file = (char *)malloc(output_length);
-    if (!output_file) {
-        perror("Failed to allocate memory for output file");
-        close(fd_input);
-        return;
-    }
-    snprintf(output_file, output_length, "%.*s.out", (int)(strlen(input_file) - 4), input_file);
+    char output_file[MAX_PATH_LENGTH];
+    snprintf(output_file, MAX_PATH_LENGTH, "%.*s.out", (int)(strlen(input_file) - 4), input_file);
 
     int fd_output = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    free(output_file);
     if (fd_output == -1) {
         perror("Failed to open output file");
         close(fd_input);
         return;
     }
 
-    // Processar comandos no ficheiro .job (restante do código permanece inalterado)
+    // Processar comandos no ficheiro .job
     while (1) {
         char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
         char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
@@ -232,7 +221,6 @@ void process_job_file(const char *input_file) {
         }
     }
 }
-
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
