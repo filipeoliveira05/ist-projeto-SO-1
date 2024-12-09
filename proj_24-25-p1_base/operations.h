@@ -47,4 +47,11 @@ void kvs_wait_backup();
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
 
+
+/// Sorts an array of key-value pairs in lexicographical order based on the keys.
+/// @param keys An array of strings representing the keys to be sorted.
+/// @param values An array of strings representing the corresponding values of the keys.
+/// @param num_pairs The number of key-value pairs to be sorted.
+void sort_key_value_pairs(char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE], size_t num_pairs);
+
 #endif  // KVS_OPERATIONS_H
