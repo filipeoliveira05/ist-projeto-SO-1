@@ -14,6 +14,25 @@
 #define MAX_FILES 100
 #define MAX_PATH_LENGTH 4096
 
+// Função para redirecionar saída padrão
+int redirect_output(int new_fd, int *saved_fd) {
+    fflush(stdout); // Garante que todos os dados pendentes sejam escritos antes de redirecionar
+    *saved_fd = dup(STDOUT_FILENO);
+    if (*saved_fd == -1) return -1;
+    if (dup2(new_fd, STDOUT_FILENO) == -1) {
+        close(*saved_fd);
+        return -1;
+    }
+    return 0;
+}
+
+// Função para restaurar saída padrão
+void restore_output(int saved_fd) {
+    fflush(stdout); // Garante que todos os dados pendentes sejam escritos antes de restaurar
+    dup2(saved_fd, STDOUT_FILENO);
+    close(saved_fd);
+}
+
 // Lista ficheiros com extensão .job na diretoria e retorna o número de ficheiros
 void list_job_files(const char *dir_path, char files[][MAX_PATH_LENGTH], size_t *num_files) {
     DIR *dir = opendir(dir_path);
@@ -50,7 +69,6 @@ void process_job_file(const char *input_file) {
     // Gerar o nome do ficheiro de saída, removendo ".job" e adicionando ".out"
     char output_file[MAX_PATH_LENGTH];
     snprintf(output_file, MAX_PATH_LENGTH, "%.*s.out", (int)(strlen(input_file) - 4), input_file);
-    printf("Output file will be: %s\n", output_file);  // Mensagem de debug
 
     int fd_output = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd_output == -1) {
@@ -75,29 +93,18 @@ void process_job_file(const char *input_file) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
-                // Redirecionar stdout para o arquivo de saída
-                printf("Redirecting stdout to output file for WRITE command\n");  // Mensagem de debug
-                int saved_stdout_write = dup(STDOUT_FILENO);
-                if (saved_stdout_write == -1) {
-                    perror("Failed to duplicate stdout");
-                    break;
-                }
-                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+
+                int saved_stdout_write;
+                if (redirect_output(fd_output, &saved_stdout_write) == -1) {
                     perror("Failed to redirect stdout");
-                    close(saved_stdout_write);
                     break;
                 }
 
-                // Executar o comando WRITE
                 if (kvs_write(num_pairs, keys, values)) {
                     fprintf(stderr, "Failed to write pair\n");
                 }
 
-                // Restaurar stdout original
-                if (dup2(saved_stdout_write, STDOUT_FILENO) == -1) {
-                    perror("Failed to restore stdout");
-                }
-                close(saved_stdout_write);
+                restore_output(saved_stdout_write);
                 break;
 
             case CMD_READ:
@@ -106,29 +113,18 @@ void process_job_file(const char *input_file) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
-                // Redirecionar stdout para o arquivo de saída
-                printf("Redirecting stdout to output file for READ command\n");  // Mensagem de debug
-                int saved_stdout_read = dup(STDOUT_FILENO);
-                if (saved_stdout_read == -1) {
-                    perror("Failed to duplicate stdout");
-                    break;
-                }
-                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+
+                int saved_stdout_read;
+                if (redirect_output(fd_output, &saved_stdout_read) == -1) {
                     perror("Failed to redirect stdout");
-                    close(saved_stdout_read);
                     break;
                 }
 
-                // Executar o comando READ
                 if (kvs_read(num_pairs, keys)) {
                     fprintf(stderr, "Failed to read pair\n");
                 }
 
-                // Restaurar stdout original
-                if (dup2(saved_stdout_read, STDOUT_FILENO) == -1) {
-                    perror("Failed to restore stdout");
-                }
-                close(saved_stdout_read);
+                restore_output(saved_stdout_read);
                 break;
 
             case CMD_DELETE:
@@ -137,53 +133,30 @@ void process_job_file(const char *input_file) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
                     continue;
                 }
-                // Redirecionar stdout para o arquivo de saída
-                printf("Redirecting stdout to output file for DELETE command\n");  // Mensagem de debug
-                int saved_stdout_delete = dup(STDOUT_FILENO);
-                if (saved_stdout_delete == -1) {
-                    perror("Failed to duplicate stdout");
-                    break;
-                }
-                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+
+                int saved_stdout_delete;
+                if (redirect_output(fd_output, &saved_stdout_delete) == -1) {
                     perror("Failed to redirect stdout");
-                    close(saved_stdout_delete);
                     break;
                 }
 
-                // Executar o comando DELETE
                 if (kvs_delete(num_pairs, keys)) {
                     fprintf(stderr, "Failed to delete pair\n");
                 }
 
-                // Restaurar stdout original
-                if (dup2(saved_stdout_delete, STDOUT_FILENO) == -1) {
-                    perror("Failed to restore stdout");
-                }
-                close(saved_stdout_delete);
+                restore_output(saved_stdout_delete);
                 break;
 
             case CMD_SHOW: {
-                // Redirecionar stdout para o arquivo de saída
-                printf("Redirecting stdout to output file for SHOW command\n");  // Mensagem de debug
-                int saved_stdout_show = dup(STDOUT_FILENO);
-                if (saved_stdout_show == -1) {
-                    perror("Failed to duplicate stdout");
-                    break;
-                }
-                if (dup2(fd_output, STDOUT_FILENO) == -1) {
+                int saved_stdout_show;
+                if (redirect_output(fd_output, &saved_stdout_show) == -1) {
                     perror("Failed to redirect stdout");
-                    close(saved_stdout_show);
                     break;
                 }
 
-                // Executar o comando SHOW
-                kvs_show(); // Saída gerada pela função kvs_show vai para fd_output
+                kvs_show();
 
-                // Restaurar stdout original
-                if (dup2(saved_stdout_show, STDOUT_FILENO) == -1) {
-                    perror("Failed to restore stdout");
-                }
-                close(saved_stdout_show);
+                restore_output(saved_stdout_show);
                 break;
             }
 
@@ -219,7 +192,7 @@ void process_job_file(const char *input_file) {
                     "  HELP\n"
                 );
                 break;
-            
+
             case CMD_EMPTY:
                 break;
 
@@ -230,7 +203,6 @@ void process_job_file(const char *input_file) {
         }
     }
 }
-
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -252,7 +224,6 @@ int main(int argc, char *argv[]) {
 
     // Processar cada ficheiro .job
     for (size_t i = 0; i < num_files; i++) {
-        printf("Processing job file: %s\n", job_files[i]);  // Mensagem de debug
         process_job_file(job_files[i]);
     }
 
