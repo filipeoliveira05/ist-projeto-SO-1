@@ -112,3 +112,25 @@ void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
 }
+
+// Função para ordenar pares chave-valor pelo primeiro elemento (chave)
+void sort_key_value_pairs(char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE], size_t num_pairs) {
+    for (size_t i = 0; i < num_pairs - 1; i++) {
+        for (size_t j = 0; j < num_pairs - i - 1; j++) {
+            // Comparar as chaves alfabeticamente
+            if (strcmp(keys[j], keys[j + 1]) > 0) {
+                // Trocar chaves
+                char temp_key[MAX_STRING_SIZE];
+                strcpy(temp_key, keys[j]);
+                strcpy(keys[j], keys[j + 1]);
+                strcpy(keys[j + 1], temp_key);
+
+                // Trocar valores correspondentes
+                char temp_value[MAX_STRING_SIZE];
+                strcpy(temp_value, values[j]);
+                strcpy(values[j], values[j + 1]);
+                strcpy(values[j + 1], temp_value);
+            }
+        }
+    }
+}
