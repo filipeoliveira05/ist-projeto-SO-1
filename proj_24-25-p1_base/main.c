@@ -27,10 +27,11 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files)
     struct dirent *entry;
     *num_files = 0;
 
-    // Conta o número de ficheiros .job
+    // Conta o número de ficheiros com a extensão .job
     while ((entry = readdir(dir)) != NULL)
     {
-        if (strstr(entry->d_name, ".job"))
+        size_t len = strlen(entry->d_name);
+        if (len > 4 && strcmp(entry->d_name + len - 4, ".job") == 0)
         {
             (*num_files)++;
         }
@@ -41,6 +42,7 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files)
     if (*files == NULL)
     {
         perror("Failed to allocate memory for files");
+        closedir(dir);
         exit(EXIT_FAILURE);
     }
 
@@ -49,9 +51,16 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files)
     size_t index = 0;
     while ((entry = readdir(dir)) != NULL)
     {
-        if (strstr(entry->d_name, ".job"))
+        size_t len = strlen(entry->d_name);
+        if (len > 4 && strcmp(entry->d_name + len - 4, ".job") == 0)
         {
             (*files)[index] = (char *)malloc(MAX_PATH_LENGTH * sizeof(char));
+            if ((*files)[index] == NULL)
+            {
+                perror("Failed to allocate memory for file path");
+                closedir(dir);
+                exit(EXIT_FAILURE);
+            }
             snprintf((*files)[index], MAX_PATH_LENGTH, "%s/%s", dir_path, entry->d_name);
             index++;
         }
@@ -62,6 +71,7 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files)
     // Ordena os ficheiros .job pela ordem alfabética
     qsort(*files, *num_files, sizeof((*files)[0]), (int (*)(const void *, const void *))strcmp);
 }
+
 
 // Processa comandos de um ficheiro .job e gera um ficheiro .out
 void process_job_file(const char *input_file, pid_t *active_backups, int active_count, int max_concurrent_backups)
