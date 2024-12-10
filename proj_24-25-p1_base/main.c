@@ -5,6 +5,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <stdio.h>
 
 #include "constants.h"
@@ -255,7 +256,7 @@ void process_job_file(const char *input_file, pid_t *active_backups, int active_
                 "  DELETE [key,key2,...]\n"
                 "  SHOW\n"
                 "  WAIT <delay_ms>\n"
-                "  BACKUP\n" // Not implemented
+                "  BACKUP\n"
                 "  HELP\n");
             break;
 
