@@ -3,6 +3,17 @@
 
 #include <stddef.h>
 
+/// Redirects the standard output (stdout) to a specified file descriptor.
+/// @param new_fd The file descriptor to redirect stdout to.
+/// @param saved_fd Pointer to an integer where the original stdout file descriptor will be saved.
+/// @return 0 if the redirection was successful, -1 otherwise.
+int redirect_output(int new_fd, int *saved_fd);
+
+/// Restores the standard output (stdout) to its original file descriptor after a redirection.
+/// @param saved_fd The file descriptor of the original stdout to restore.
+/// @return void.
+void restore_output(int saved_fd);
+
 /// Initializes the KVS state.
 /// @return 0 if the KVS state was initialized successfully, 1 otherwise.
 int kvs_init();
@@ -35,18 +46,14 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE]);
 /// @param fd File descriptor to write the output.
 void kvs_show();
 
-/// Creates a backup of the KVS state and stores it in the correspondent
-/// backup file
-/// @return 0 if the backup was successful, 1 otherwise.
-int kvs_backup();
-
-/// Waits for the last backup to be called.
-void kvs_wait_backup();
+/// Creates a backup of the KVS state and stores it in the specified backup file.
+/// @param backup_file The path to the file where the backup will be stored.
+/// @return 0 if the backup was successful, -1 otherwise.
+int kvs_backup(const char *backup_file);
 
 /// Waits for a given amount of time.
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
-
 
 /// Sorts an array of key-value pairs in lexicographical order based on the keys.
 /// @param keys An array of strings representing the keys to be sorted.
@@ -54,4 +61,4 @@ void kvs_wait(unsigned int delay_ms);
 /// @param num_pairs The number of key-value pairs to be sorted.
 void sort_key_value_pairs(char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE], size_t num_pairs);
 
-#endif  // KVS_OPERATIONS_H
+#endif // KVS_OPERATIONS_H
