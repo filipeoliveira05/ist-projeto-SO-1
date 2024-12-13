@@ -49,7 +49,7 @@ void kvs_show();
 /// Creates a backup of the KVS state and stores it in the specified backup file.
 /// @param backup_file The path to the file where the backup will be stored.
 /// @return 0 if the backup was successful, -1 otherwise.
-int kvs_backup(const char *backup_file);
+int kvs_backup(const char *backup_file, pthread_mutex_t *kvs_mutex);
 
 /// Waits for a given amount of time.
 /// @param delay_us Delay in milliseconds.
