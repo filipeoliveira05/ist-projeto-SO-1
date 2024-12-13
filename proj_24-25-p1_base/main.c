@@ -36,52 +36,56 @@ void list_job_files(const char *dir_path, char ***files, size_t *num_files) {
 
   struct dirent *entry;
   *num_files = 0;
+  *files = NULL;
 
-  // Conta o número de ficheiros com extensão .job
+  // Itera pelos arquivos da diretoria
   while ((entry = readdir(dir)) != NULL) {
     size_t len = strlen(entry->d_name);
     if (len > 4 && strcmp(entry->d_name + len - 4, ".job") == 0) {
-      (*num_files)++;
-    }
-  }
-
-  // Aloca memória para armazenar os caminhos dos ficheiros
-  *files = malloc(sizeof(char *) * (*num_files));
-  if (*files == NULL) {
-    perror("Failed to allocate memory for files");
-    closedir(dir);
-    exit(EXIT_FAILURE);
-  }
-
-  // Redefine o ponteiro da diretoria e preenche a lista de ficheiros
-  rewinddir(dir);
-  size_t index = 0;
-  while ((entry = readdir(dir)) != NULL) {
-    size_t len = strlen(entry->d_name);
-    if (len > 4 && strcmp(entry->d_name + len - 4, ".job") == 0) {
-      (*files)[index] = malloc(MAX_PATH_LENGTH * sizeof(char));
-      if ((*files)[index] == NULL) {
+      // Constrói o caminho completo
+      size_t path_len = strlen(dir_path) + len + 2; // 1 para /, 1 para \0
+      char *full_path = malloc(path_len * sizeof(char));
+      if (!full_path) {
         perror("Failed to allocate memory for file path");
-        // Limpa a memória já alocada
-        for (size_t i = 0; i < index; i++) {
+        closedir(dir);
+        // Libera a memória previamente alocada
+        for (size_t i = 0; i < *num_files; i++) {
           free((*files)[i]);
         }
         free(*files);
-        closedir(dir);
         exit(EXIT_FAILURE);
       }
-      // Constrói o caminho completo do ficheiro
-      snprintf((*files)[index], MAX_PATH_LENGTH, "%s/%s", dir_path,
-               entry->d_name);
-      index++;
+      snprintf(full_path, path_len, "%s/%s", dir_path, entry->d_name);
+
+      // Adiciona o caminho à lista de ficheiros
+      char **temp = realloc(*files, sizeof(char *) * (*num_files + 1));
+      if (!temp) {
+        perror("Failed to reallocate memory for files list");
+        free(full_path);
+        closedir(dir);
+        for (size_t i = 0; i < *num_files; i++) {
+          free((*files)[i]);
+        }
+        free(*files);
+        exit(EXIT_FAILURE);
+      }
+      *files = temp;
+      (*files)[*num_files] = full_path;
+      (*num_files)++;
     }
   }
 
   closedir(dir);
 
+  if (*num_files == 0) {
+    *files = NULL;
+  }
+
   // Ordena os arquivos .job em ordem alfabética
-  qsort(*files, *num_files, sizeof((*files)[0]),
-        (int (*)(const void *, const void *))strcmp);
+  if (*num_files > 0) {
+    qsort(*files, *num_files, sizeof((*files)[0]),
+          (int (*)(const void *, const void *))strcmp);
+  }
 }
 
 // Processa comandos de um ficheiro .job e gera um ficheiro .out
@@ -101,15 +105,31 @@ void process_job_file(const char *input_file, pid_t *active_backups,
     printf("Error: input_file is NULL\n");
   }
 
+  // Calcula o tamanho necessário para o nome do ficheiro de saída
+  size_t input_length = strlen(input_file);
+  if (input_length < 4 || strcmp(input_file + input_length - 4, ".job") != 0) {
+    fprintf(stderr, "Error: input file does not have a .job extension\n");
+    close(fd_input);
+    return;
+  }
+
   // Gera o nome do ficheiro de saída substituindo ".job" por ".out"
-  char output_file[MAX_PATH_LENGTH];
-  snprintf(output_file, MAX_PATH_LENGTH, "%.*s.out",
-           (int)(strlen(input_file) - 4), input_file);
+  size_t output_length = input_length - 4 + 4;   // Remover .job, adicionar .out
+  char *output_file = malloc(output_length + 1); // +1 para o '\0'
+  if (!output_file) {
+    perror("Failed to allocate memory for output file name");
+    close(fd_input);
+    return;
+  }
+
+  snprintf(output_file, output_length + 1, "%.*s.out", (int)(input_length - 4),
+           input_file);
 
   // Abre o ficheiro .out para escrita
   int fd_output = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fd_output == -1) {
     perror("Failed to open output file");
+    free(output_file);
     close(fd_input);
     return;
   }
@@ -236,11 +256,29 @@ void process_job_file(const char *input_file, pid_t *active_backups,
 
     case CMD_BACKUP: {
       // Processa comando de backup
-      char backup_file[MAX_PATH_LENGTH];
-      // Cria o nome do arquivo de backup baseado no nome do ficheiro de entrada
-      // e no contador de backups ativos
-      snprintf(backup_file, MAX_PATH_LENGTH, "%.*s-%d.bck",
-               (int)(strlen(input_file) - 4), input_file, active_count);
+
+      // Calcula o tamanho do nome base do ficheiro (sem extensão)
+      size_t base_length = strlen(input_file);
+      if (base_length < 4 ||
+          strcmp(input_file + base_length - 4, ".job") != 0) {
+        fprintf(stderr, "Error: input file does not have a .job extension\n");
+        break;
+      }
+
+      // Gera o nome do ficheiro de backup baseado no ficheiro de entrada e no
+      // contador de backups ativos
+      size_t backup_length =
+          base_length - 4 +
+          11; // "-<count>.bck" (máximo 10 dígitos para o contador)
+      char *backup_file = malloc(backup_length + 1); // +1 para o '\0'
+
+      if (!backup_file) {
+        perror("Failed to allocate memory for backup file name");
+        break;
+      }
+
+      snprintf(backup_file, backup_length + 1, "%.*s-%d.bck",
+               (int)(base_length - 4), input_file, active_count);
 
       // Espera se o número de backups ativos atingir o limite máximo
       while (active_count >= max_concurrent_backups) {
@@ -281,6 +319,7 @@ void process_job_file(const char *input_file, pid_t *active_backups,
         perror("Failed to fork");
       }
 
+      free(backup_file);
       break;
     }
 
@@ -309,10 +348,12 @@ void process_job_file(const char *input_file, pid_t *active_backups,
       // Fecha os descritores de ficheiros de entrada e saída
       close(fd_input);
       close(fd_output);
+      free(output_file);
 
       return;
     }
   }
+  free(output_file);
 }
 void *thread_function(void *arg) {
   // Obtém os argumentos da thread
@@ -412,6 +453,7 @@ int main(int argc, char *argv[]) {
       if (pthread_create(&threads[i], NULL, thread_function, args) != 0) {
         fprintf(stderr, "Failed to create thread for file %s\n",
                 args->file_name);
+        free(args);
         exit(EXIT_FAILURE);
 
       } else {
@@ -439,12 +481,12 @@ int main(int argc, char *argv[]) {
         }
       }
     }
-
-    // Liberta a memória do ficheiro .job processado
-    free(job_files[i]);
   }
 
   // Liberta a memória alocada para a lista de ficheiros .job
+  for (size_t i = 0; i < num_files; i++) {
+    free(job_files[i]);
+  }
   free(job_files);
 
   // Finaliza o sistema KVS
